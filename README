@@ -1,0 +1,15 @@
+Sometimes, we do something REALLY STUPID, and we end up with a MySQL InnoDB database without its .frm files.  Thanks to the innodb-tools project[1] and Chris Calender's helpful howto[2], all is not lost!
+
+This is a crude wrapper to let you recover all the tables in one pass, per Chris's "recover based off the entire ibdata files" method.
+
+Documentation is sorely lacking, as is design, but:
+
+- Change the obvious globals to match your setup
+- If you don't find them obvious, you shouldn't use this
+- table_list should be a simple text file with a list of table names, one per line
+- the output of "create_defs" is stored in the "defs/" directory, and create_defs is only
+  run once. That way, you can tweak the defs to eliminate garbage records, and repeat as needed.
+- I don't even know MySQL.  Use at your own risk.  
+
+[1] http://code.google.com/p/innodb-tools/
+[2] http://www.chriscalender.com/?tag=innodb-recovery-tool
