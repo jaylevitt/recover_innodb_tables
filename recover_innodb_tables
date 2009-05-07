@@ -1,0 +1,65 @@
+#!/usr/bin/env ruby
+require 'ftools'
+
+TOOLS_DIR = "/mnt/recover/src/innodb-tools"
+TABLE_LIST = "./table_list"
+USER = "root"
+DB = "typo"
+DEFS_DIR = "./defs"
+
+def prep_environment
+  unless File.exist?("ibdata1")
+    abort "You must run recover_tables from the directory containing ibdata1."
+    # or you must fork this and put in some option parsing!
+  end
+
+  unless FileTest.directory?(DEFS_DIR)
+    Dir.mkdir(DEFS_DIR)
+  end
+end
+
+def defs_file(table)
+  "#{DEFS_DIR}/#{table}.defs"
+end
+
+def create_defs(table)
+  # We'll only create the def once, so you can tweak it by hand
+  return if File.exist?(defs_file(table))
+
+  puts "Creating #{table}.defs"
+  defs = %x[#{TOOLS_DIR}/create_defs.pl --user=#{USER} --db=#{DB} --table=#{table}]
+  File.open(defs_file(table), "w") {|f| f.write(defs) }
+end
+
+def build_parser(table)
+  puts "Building parser"
+  File.copy(defs_file(table), "#{TOOLS_DIR}/include/table_defs.h", "w") {|f| f.write(defs) }
+
+  out = %x[cd #{TOOLS_DIR};make]
+  if $?.exitstatus != 0
+    puts out
+    abort "Make failed: #{$?.exitstatus}"
+  end
+
+end
+
+def parse_data(table)
+  puts "Parsing ibdata"
+  out = %x[#{TOOLS_DIR}/constraints_parser -f ibdata1 -5]
+  File.open("#{table}.csv", "w") {|f| f.write(out) }
+end
+
+prep_environment
+
+tables = open(TABLE_LIST).readlines
+tables.each do |t|
+  t = t.chomp.rstrip
+  puts "Recovering table '#{t}'"
+  create_defs(t)
+  build_parser(t)
+  parse_data(t)  
+end
+
+
+
+
