@@ -1,27 +1,35 @@
 #!/usr/bin/env ruby
 require 'ftools'
 
+# You'll definitely need to change these
 TOOLS_DIR = "/mnt/recover/src/innodb-tools"
 TABLE_LIST = "./table_list"
 USER = "root"
 DB = "typo"
+
+# You probably don't have to change these
 DEFS_DIR = "./defs"
+TSV_DIR = "./tsv" # That's tab-separated value, of course
 
 def prep_environment
   unless File.exist?("ibdata1")
-    abort "You must run recover_tables from the directory containing ibdata1."
+    abort "You must run recover_innodb_tables from the directory containing ibdata1."
     # or you must fork this and put in some option parsing!
   end
 
-  unless FileTest.directory?(DEFS_DIR)
-    Dir.mkdir(DEFS_DIR)
-  end
+  Dir.mkdir(DEFS_DIR) unless FileTest.directory?(DEFS_DIR)
+  Dir.mkdir(TSV_DIR) unless FileTest.directory?(TSV_DIR)
+    
 end
 
 def defs_file(table)
   "#{DEFS_DIR}/#{table}.defs"
 end
 
+def tsv_file(table)
+  "#{TSV_DIR}/#{table}.tsv"
+end
+  
 def create_defs(table)
   # We'll only create the def once, so you can tweak it by hand
   return if File.exist?(defs_file(table))
@@ -29,6 +37,12 @@ def create_defs(table)
   puts "Creating #{table}.defs"
   defs = %x[#{TOOLS_DIR}/create_defs.pl --user=#{USER} --db=#{DB} --table=#{table}]
   File.open(defs_file(table), "w") {|f| f.write(defs) }
+end
+
+def needs_parsing(table)
+  return true unless File.exist?(tsv_file(table))
+  
+  File.mtime(defs_file(table)) > File.mtime(tsv_file(table))
 end
 
 def build_parser(table)
@@ -45,8 +59,12 @@ end
 
 def parse_data(table)
   puts "Parsing ibdata"
+
+  # If your file is huge, this is a horrible memory-hogging way to do it.  
+  # My file was small, and my first attempt at redirecting output with system()
+  # didn't work for some reason, so...
   out = %x[#{TOOLS_DIR}/constraints_parser -f ibdata1 -5]
-  File.open("#{table}.csv", "w") {|f| f.write(out) }
+  File.open(tsv_file(table), "w") {|f| f.write(out) }
 end
 
 prep_environment
@@ -56,8 +74,11 @@ tables.each do |t|
   t = t.chomp.rstrip
   puts "Recovering table '#{t}'"
   create_defs(t)
-  build_parser(t)
-  parse_data(t)  
+
+  if needs_parsing(t)
+    build_parser(t)
+    parse_data(t)  
+  end
 end
 
 
